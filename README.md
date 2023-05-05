@@ -1,13 +1,11 @@
-# Sample Hardhat Project
+# Mercury Protocol Data DAO smart contracts
 
-This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, and a script that deploys that contract.
+A data DAO is a union of data owners who pool their data together and monetize it collectively on the Mercury Data Marketplace.
+These smart contracts are deployed on the Filecoin Virtual Machine. The data DAO smart contract directly interacts with the FEVM and allows the data DAO to pay for storage deals.
 
-Try running some of the following tasks:
+The Data DAO factory smart contract makes it easy and cost efficient to deploy new data DAOs.
 
-```shell
-npx hardhat help
-npx hardhat test
-REPORT_GAS=true npx hardhat test
-npx hardhat node
-npx hardhat run scripts/deploy.js
-```
+TODO:
+- proposals & voting mechanisms (governor-style)
+- perpetual storage deals
+- staking FIL or MCY in well-performing data DAOs (more on this in our [whitepaper](https://mercuryprotocol.io/mercury-whitepaper.pdf))
