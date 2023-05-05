@@ -2,6 +2,7 @@
 pragma solidity ^0.8.17;
 
 import "../utils/Structs.sol";
+import "./IMercurySBT.sol";
 
 interface IDataDao {
     /// @dev Emitted when a admin is added to the DAO
@@ -27,6 +28,8 @@ interface IDataDao {
     function depositFil() external payable;
 
     function withdrawFil(uint256 amount) external;
+
+    function sbt() external view returns (IMercurySBT);
 
     function createOrder(
         uint256 _price,

@@ -18,11 +18,11 @@ contract DataDao is Initializable, AccessControl {
     MercurySBT public sbt;
     IERC20 public MCY;
 
-    IStorage s;
+    IStorage public s;
 
     IDataManager dataManager;
     IMarketplace marketplace;
-    IDealClient client;
+    IDealClient public client;
 
     function initialize(
         string memory name,
@@ -42,7 +42,7 @@ contract DataDao is Initializable, AccessControl {
             }
         }
 
-        sbt = new MercurySBT(name, symbol, admins);
+        sbt = new MercurySBT(name, symbol, address(this));
         MCY = _MCY;
         dataManager = _dataManager;
         marketplace = _marketplace;
@@ -52,7 +52,7 @@ contract DataDao is Initializable, AccessControl {
 
     modifier onlyMember() {
         if (sbt.balanceOf(msg.sender) != 1) {
-            revert();
+            revert("Not a member");
         }
         _;
     }
@@ -61,14 +61,19 @@ contract DataDao is Initializable, AccessControl {
         sbt.mint(to);
     }
 
+    // TODO delete cids
     function revokeMembership(
         uint256 tokenId
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         sbt.revoke(tokenId);
     }
 
-    function activePieceCids() external view returns (bytes[] memory) {
-        return s.activePieceCids();
+    function activePieceCids() external view returns (string[] memory) {
+        return s.getActiveCids();
+    }
+
+    function activateCid(bytes calldata pieceCid) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        s.activateCid(pieceCid);
     }
 
     function isMember(address user) external view returns (bool) {
@@ -91,13 +96,14 @@ contract DataDao is Initializable, AccessControl {
         }
     }
 
-    function depositFil() external payable {
+    function depositFil() external payable onlyMember {
         uint256 deposits = s.filDeposits(msg.sender);
         s.setFilDeposit(msg.sender, deposits + msg.value);
+        client.addBalance{value: msg.value}();
     }
 
-    function withdrawFil(uint256 amount) external {
-        if (s.filDeposits(msg.sender) < amount) {
+    function withdrawFil(uint256 amount) external onlyMember {
+        if (address(this).balance < amount || s.filDeposits(msg.sender) < amount) {
             revert();
         }
         (bool success, ) = msg.sender.call{value: amount}("");
@@ -120,7 +126,7 @@ contract DataDao is Initializable, AccessControl {
             _price,
             _dataUnits,
             _dataType,
-            false,
+            IDataManager.Side.SELL,
             _dataHash
         );
     }

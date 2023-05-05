@@ -9,19 +9,14 @@ contract MercurySBT is ERC721, AccessControl {
 
     uint256[] public tokenIds;
     mapping(uint256 => uint256) tokenIdIdxs;
+    mapping(address => uint256) public tokensPerMember;
 
     constructor(
         string memory name_,
         string memory symbol_,
-        address[] memory admins
+        address admin
     ) ERC721(name_, symbol_) {
-        for (uint8 i = 0; i < admins.length; ) {
-            _setupRole(DEFAULT_ADMIN_ROLE, admins[i]);
-
-            unchecked {
-                ++i;
-            }
-        }
+        _setupRole(DEFAULT_ADMIN_ROLE, admin);
     }
 
     function _transfer(
@@ -35,14 +30,19 @@ contract MercurySBT is ERC721, AccessControl {
     function mint(address to) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(balanceOf(to) == 0, "Address is already a member");
         tokenCount++;
+
         _mint(to, tokenCount);
+
         tokenIdIdxs[tokenCount] = tokenIds.length;
         tokenIds.push(tokenCount);
+
+        tokensPerMember[to] = tokenCount;
     }
 
     function revoke(uint256 tokenId) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(_exists(tokenId), "Token with id does not exist");
         tokenCount--;
+        
         _burn(tokenId);
 
         uint256 idx = tokenIdIdxs[tokenId];
@@ -50,6 +50,9 @@ contract MercurySBT is ERC721, AccessControl {
         tokenIds[idx] = last;
         tokenIdIdxs[last] = idx;
         tokenIds.pop();
+
+        address owner = _ownerOf(tokenId);
+        tokensPerMember[owner] = 0;
     }
 
     /**

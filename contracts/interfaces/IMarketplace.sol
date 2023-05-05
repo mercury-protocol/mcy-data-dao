@@ -11,7 +11,7 @@ interface IMarketplace {
     event AcceptBuyOrder(bytes32 indexed id, bytes32 indexed acceptanceId);
     
     /** 
-    @notice Accepts a data sale offer from a data seller.
+    @notice Accepts a sell order from a data seller.
     @dev It checks whether the buyer has enough deposits to pay.
     @dev Also checks whether the order has an operator who has valid attestation
     The operator confirms the data receival for a sell order by setting the data units fulfilled to the amount of data received.

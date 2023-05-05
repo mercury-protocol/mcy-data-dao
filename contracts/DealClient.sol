@@ -11,8 +11,9 @@ import "solidity-cborutils/contracts/CBOR.sol";
 import "./utils/Constants.sol";
 import "./utils/Structs.sol";
 import "./utils/Enums.sol";
-import "./utils/Errors.sol";
+import "./utils/Utils.sol";
 import "./Storage.sol";
+import "./interfaces/IDataDao.sol";
 
 contract DealClient is Initializable {
     using CBOR for CBOR.CBORBuffer;
@@ -35,12 +36,16 @@ contract DealClient is Initializable {
     }
 
     modifier onlyDao() {
-        require(msg.sender == dao, "Only dao can call");
+        if (msg.sender != dao) {
+            revert();
+        }
         _;
     }
 
     function setDao(address _dao) external {
-        require(dao == address(0), "Already set");
+        if (dao != address(0)) {
+            revert();
+        }
         dao = _dao;
     }
 
@@ -51,7 +56,7 @@ contract DealClient is Initializable {
             s.pieceStatus(deal.piece_cid) == Status.DealPublished ||
             s.pieceStatus(deal.piece_cid) == Status.DealActivated
         ) {
-            revert("deal with this pieceCid already published");
+            revert();
         }
 
         uint256 index = s.getDealRequestsLength();
@@ -61,12 +66,10 @@ contract DealClient is Initializable {
         bytes32 id = keccak256(
             abi.encodePacked(block.timestamp, msg.sender, index)
         );
-        /* s.dealRequestIdx[id] = Structs.RequestIdx(index, true); */
+
         s.setDealRequestIdx(id, index);
         s.setPieceRequest(deal.piece_cid, id);
-        /* s.pieceRequests[deal.piece_cid] = Structs.RequestId(id, true); */
         s.setPieceStatus(deal.piece_cid, Status.RequestSubmitted);
-        /* s.pieceStatus[deal.piece_cid] = Status.RequestSubmitted; */
 
         // writes the proposal metadata to the event log
         emit DealProposalCreate(
@@ -81,17 +84,15 @@ contract DealClient is Initializable {
 
     function updateActivationStatus(bytes memory pieceCid) public {
         if (s.pieceDeals(pieceCid) <= 0) {
-            revert NoDealPublished();
+            revert();
         }
 
         MarketTypes.GetDealActivationReturn memory ret = MarketAPI
             .getDealActivation(s.pieceDeals(pieceCid));
         if (CommonTypes.ChainEpoch.unwrap(ret.terminated) > 0) {
             s.setPieceStatus(pieceCid, Status.DealTerminated);
-            //s.pieceStatus[pieceCid] = Status.DealTerminated;
         } else if (CommonTypes.ChainEpoch.unwrap(ret.activated) > 0) {
             s.setPieceStatus(pieceCid, Status.DealActivated);
-            //s.pieceStatus[pieceCid] = Status.DealActivated;
         }
     }
 
@@ -117,9 +118,12 @@ contract DealClient is Initializable {
         } else if (method == MARKET_NOTIFY_DEAL_METHOD_NUM) {
             dealNotify(params);
         } else if (method == DATACAP_RECEIVER_HOOK_METHOD_NUM) {
-            receiveDataCap(params);
+            if (msg.sender != DATACAP_ACTOR_ETH_ADDRESS) {
+            revert();
+        }
+        emit ReceivedDataCap("DataCap Received!");
         } else {
-            revert("the filecoin method that was called is not handled");
+            revert();
         }
         return (0, codec, ret);
     }
@@ -131,7 +135,7 @@ contract DealClient is Initializable {
     // @params - cbor byte array of AccountTypes.AuthenticateMessageParams
     function authenticateMessage(bytes memory params) internal view {
         if (msg.sender != MARKET_ACTOR_ETH_ADDRESS) {
-            revert NotMarketActorf05();
+            revert();
         }
 
         AccountTypes.AuthenticateMessageParams memory amp = params
@@ -143,11 +147,8 @@ contract DealClient is Initializable {
 
         Structs.RequestId memory pieceRequest = s.getProposalIdSet(pieceCid);
 
-        if (!pieceRequest.valid) {
-            revert NoPieceCid();
-        }
-        if (pieceRequest.valid) {
-            revert ProviderAlreadyClaimedCid();
+        if (!pieceRequest.valid || pieceRequest.valid) {
+            revert();
         }
         Structs.DealRequest memory req = s.getDealRequest(
             pieceRequest.requestId
@@ -165,7 +166,7 @@ contract DealClient is Initializable {
             Utils.bigIntToUint(proposal.client_collateral) >=
             req.client_collateral
         ) {
-            revert ClientCollateralTooBig();
+            revert();
         }
     }
 
@@ -176,7 +177,7 @@ contract DealClient is Initializable {
     // @params - cbor byte array of MarketDealNotifyParams
     function dealNotify(bytes memory params) internal {
         if (msg.sender != MARKET_ACTOR_ETH_ADDRESS) {
-            revert NotMarketActorf05();
+            revert();
         }
 
         MarketTypes.MarketDealNotifyParams memory mdnp = MarketCBOR
@@ -188,16 +189,12 @@ contract DealClient is Initializable {
         // marketDealNotify calls where someone could have 2 of the same deal proposals
         // within the same PSD msg, which would then get validated by authenticateMessage
         // However, only one of those deals should be allowed
-
         Structs.RequestId memory pieceRequest = s.getProposalIdSet(
             proposal.piece_cid.data
         );
 
-        if (!pieceRequest.valid) {
-            revert NoPieceCid();
-        }
-        if (pieceRequest.valid) {
-            revert ProviderAlreadyClaimedCid();
+        if (!pieceRequest.valid || pieceRequest.valid) {
+            revert();
         }
 
         s.setPieceProvider(
@@ -207,15 +204,37 @@ contract DealClient is Initializable {
 
         s.setPieceDeal(proposal.piece_cid.data, mdnp.dealId);
         s.setPieceStatus(proposal.piece_cid.data, Status.DealPublished);
-        //s.pieceDeals[proposal.piece_cid.data] = mdnp.dealId;
-        //s.pieceStatus[proposal.piece_cid.data] = Status.DealPublished;
+        // adding it to the active cids of the DAO
+        s.activateCid(proposal.piece_cid.data);
     }
 
-    function receiveDataCap(bytes memory /* params */) internal {
-        if (msg.sender != DATACAP_ACTOR_ETH_ADDRESS) {
-            revert NotDataCapActorf07();
+    // addBalance funds the builtin storage market actor's escrow
+    // with funds from the contract's own balance
+    // @value - amount to be added in escrow in attoFIL
+    function addBalance() public payable {
+        MarketAPI.addBalance(Utils.getDelegatedAddress(address(this)), msg.value);
+    }
+
+    // This function attempts to withdraw the specified amount from the contract addr's escrow balance
+    // If less than the given amount is available, the full escrow balance is withdrawn
+    // @client - Eth address where the balance is withdrawn to. This can be the contract address or an external address
+    // @value - amount to be withdrawn in escrow in attoFIL
+    function withdrawBalance(
+        address client,
+        uint256 value
+    ) public returns (uint) {
+        MarketTypes.WithdrawBalanceParams memory params = MarketTypes
+            .WithdrawBalanceParams(
+                Utils.getDelegatedAddress(client),
+                Utils.uintToBigInt(value)
+            );
+        CommonTypes.BigInt memory ret = MarketAPI.withdrawBalance(params);
+
+        (bool success, ) = address(dao).call{value: value}("");
+        if (!success) {
+            revert();
         }
-        emit ReceivedDataCap("DataCap Received!");
-        // Add get datacap balance api and store datacap amount
+
+        return Utils.bigIntToUint(ret);
     }
 }

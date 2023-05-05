@@ -5,4 +5,8 @@ import "../utils/Structs.sol";
 
 interface IDealClient {
     function makeDealProposal(Structs.DealRequest calldata deal) external;
+
+    function addBalance() external payable;
+
+    function withdrawBalance(address client, uint256 value) external returns (uint);
 }

@@ -9,18 +9,23 @@ import "../utils/Structs.sol";
 @notice The data manager is responsible for keeping track of each buy/sell data offer.
  */
 interface IDataManager {
+    enum Side {
+        BUY,
+        SELL
+    }
+
     /**
     @dev Creates a new data sale item on the marketplace.
     @param _price The price in MCY offered/asked for the data.
     @param _dataUnits The units of data needed/offered.
     @param _dataType The data type the data sale item is about
-    @param _buy Wether it is a buy/sale offer.
+    @param side Wether it is a buy/sale offer.
      */
     function createOrder(
         uint256 _price,
         uint256 _dataUnits,
         Structs.DataType calldata _dataType,
-        bool _buy,
+        Side side,
         bytes32 _dataHash
     ) external returns (bytes32 id);
 

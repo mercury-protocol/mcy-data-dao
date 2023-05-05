@@ -18,6 +18,9 @@ contract Storage {
     mapping(bytes => uint64) public pieceDeals; // commP -> deal ID
     mapping(bytes => Status) public pieceStatus;
 
+    string[] activeCids; // data cids
+    mapping(address => uint256[]) cidIdxs; // data cid indexes per member
+
     mapping(address => uint256) public filDeposits;
 
     address client;
@@ -34,7 +37,6 @@ contract Storage {
         dao = _dao;
     }
 
-    bytes[] activeCids;
     function getProviderSet(
         bytes calldata cid
     ) public view returns (Structs.ProviderSet memory) {
@@ -98,9 +100,20 @@ contract Storage {
         filDeposits[user] = amount;
     }
 
-    function getActiveCids() public view returns (bytes[] memory) {
+    function getActiveCids() public view returns (string[] memory) {
         return activeCids;
     } 
+
+    function getActiveCidsLength() public view returns (uint256) {
+        return activeCids.length;
+    }
+
+    function activateCid(bytes calldata pieceCid) external authorize {
+        Structs.RequestId memory reqId = pieceRequests[pieceCid];
+        Structs.RequestIdx memory reqIdx = dealRequestIdx[reqId.requestId];
+        Structs.DealRequest memory req = dealRequests[reqIdx.idx];
+        activeCids.push(req.dataCid);
+    }
 
     function getExtraParams(
         bytes32 proposalId

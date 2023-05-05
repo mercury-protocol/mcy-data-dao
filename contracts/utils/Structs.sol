@@ -2,6 +2,11 @@
 pragma solidity ^0.8.17;
 
 library Structs {
+    struct DataCid {
+        string cid;
+        bool isActive;
+    }
+
     struct DataType {
         uint256 id;
         string name;
@@ -45,6 +50,7 @@ library Structs {
         uint256 storage_price_per_epoch;
         uint256 provider_collateral;
         uint256 client_collateral;
+        string dataCid;
         uint64 extra_params_version;
         ExtraParamsV1 extra_params;
     }
